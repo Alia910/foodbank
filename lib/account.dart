@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:foodbank/signin.dart';
@@ -36,7 +37,7 @@ class _AccPageState extends State<AccPage> {
       final user = _auth.currentUser;
       try {
         if (user != null) {
-          // Update name
+          // Update name in Firebase Authentication
           if (_nameController.text.isNotEmpty) {
             await user.updateDisplayName(_nameController.text);
           }
@@ -47,6 +48,9 @@ class _AccPageState extends State<AccPage> {
             await user.updatePassword(_newPasswordController.text);
           }
 
+          // Update name in Firestore
+          await _updateNameInFirestore(user.uid, _nameController.text);
+
           await user.reload();
           _showSnackBar('Success', 'Profile updated successfully');
         }
@@ -54,6 +58,14 @@ class _AccPageState extends State<AccPage> {
         _showSnackBar('Error', 'Failed to update profile: ${e.toString()}');
       }
     }
+  }
+
+  // Update name in Firestore database
+  Future<void> _updateNameInFirestore(String userId, String newName) async {
+    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    await userRef.update({
+      'fullName': newName,
+    });
   }
 
   Future<void> logout() async {
@@ -76,7 +88,17 @@ class _AccPageState extends State<AccPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Account Settings"),
+        backgroundColor: const Color(0xFF083C81),
+        title: const Text(
+          "Account Settings",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        centerTitle: true, // Centers the title
+        automaticallyImplyLeading: false, // Removes the back button
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

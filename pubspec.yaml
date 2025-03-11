@@ -29,16 +29,17 @@ environment:
 dependencies:
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1    # If you're using Firebase Authentication
-  cloud_firestore: ^5.4.4  # If you're using Firestore
+  cloud_firestore: ^5.6.1  # If you're using Firestore
   firebase_analytics: ^11.3.3 # If you want analytics
   firebase_database: ^11.1.4
-  shared_preferences: ^2.3.2
+  shared_preferences: ^2.3.5
   get: ^4.6.6
   geolocator: ^13.0.2
   geocoding: ^3.0.0
   google_maps_flutter: ^2.10.0
   collection: ^1.18.0
-  firebase_messaging: ^15.1.6
+  firebase_messaging: ^15.2.0
+  geodesy: ^0.10.2
 
   # Add any other Firebase services you need
   flutter:
@@ -49,6 +50,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   icons_plus: ^4.0.0
   sliding_clipped_nav_bar: ^3.1.1
+  fl_chart: ^0.70.2
 
 dev_dependencies:
   flutter_test:

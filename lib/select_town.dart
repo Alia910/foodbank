@@ -20,9 +20,8 @@ class _SelectTownPageState extends State<SelectTownPage> {
     "Chenderiang",
     "Temoh",
     "Tapah",
-    "Felda Gunung Besout",
-    "Pulau Bekau",
-    "Air Kuning",
+    "Slim River",
+    "Trolak"
   ];
   List<String> filteredTowns = [];
   final TextEditingController searchController = TextEditingController();
@@ -30,19 +29,14 @@ class _SelectTownPageState extends State<SelectTownPage> {
   @override
   void initState() {
     super.initState();
-    filteredTowns = towns; // Initially show all towns
+    filteredTowns = towns;
   }
 
   void filterTowns(String query) {
     setState(() {
-      if (query.isEmpty) {
-        filteredTowns = towns;
-      } else {
-        filteredTowns = towns
-            .where((town) =>
-            town.toLowerCase().contains(query.toLowerCase())) // Case insensitive
-            .toList();
-      }
+      filteredTowns = query.isEmpty
+          ? towns
+          : towns.where((town) => town.toLowerCase().contains(query.toLowerCase())).toList();
     });
   }
 
@@ -69,9 +63,7 @@ class _SelectTownPageState extends State<SelectTownPage> {
 
       if (permission == LocationPermission.deniedForever) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  "Location permission denied forever. Please enable it in app settings.")),
+          const SnackBar(content: Text("Location permission denied forever. Please enable it in app settings.")),
         );
         return;
       }
@@ -83,15 +75,12 @@ class _SelectTownPageState extends State<SelectTownPage> {
         ),
       );
 
-      List<Placemark> placemarks =
-      await placemarkFromCoordinates(position.latitude, position.longitude);
+      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
 
       if (placemarks.isNotEmpty) {
         String currentTown = placemarks[0].locality ?? '';
         setState(() {
-          filteredTowns = towns
-              .where((town) => town.toLowerCase() == currentTown.toLowerCase())
-              .toList();
+          filteredTowns = towns.where((town) => town.toLowerCase() == currentTown.toLowerCase()).toList();
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +130,7 @@ class _SelectTownPageState extends State<SelectTownPage> {
         coordinates = const LatLng(4.195228730544714, 101.14296840180225);
         break;
       default:
-        coordinates = const LatLng(0.0, 0.0); // Default fallback
+        coordinates = const LatLng(0.0, 0.0);
     }
 
     Navigator.push(
@@ -156,6 +145,7 @@ class _SelectTownPageState extends State<SelectTownPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: const Color(0xff083c81),
         title: const Text(
           "Select Town",
@@ -173,13 +163,6 @@ class _SelectTownPageState extends State<SelectTownPage> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 5,
-                    offset: Offset(0, 2),
-                  ),
-                ],
               ),
               child: TextField(
                 controller: searchController,
@@ -193,52 +176,44 @@ class _SelectTownPageState extends State<SelectTownPage> {
             ),
           ),
           Expanded(
-            child: ListView.separated(
+            child: ListView.builder(
               padding: const EdgeInsets.all(10),
+              itemCount: filteredTowns.length,
               itemBuilder: (context, index) {
-                return InkWell(
-                  onTap: () {
-                    String selectedTown = filteredTowns[index];
-                    showMap(selectedTown);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: selectedIndex == index
-                          ? Colors.blue.shade100
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      filteredTowns[index],
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: selectedIndex == index
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: selectedIndex == index
-                            ? const Color(0xFF083C81)
-                            : Colors.black87,
-                      ),
-                    ),
-                  ),
+                return ListTile(
+                  title: Text(filteredTowns[index]),
+                  onTap: () => showMap(filteredTowns[index]),
                 );
               },
-              separatorBuilder: (context, index) => const Divider(
-                color: Colors.grey,
-                thickness: 0.5,
-              ),
-              itemCount: filteredTowns.length,
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF083C81),
-        onPressed: () async {
-          await useCurrentLocation();
-        },
-        child: const Icon(Icons.my_location, color: Colors.white),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            backgroundColor: const Color(0xFF083C81),
+            onPressed: useCurrentLocation,
+            child: const Icon(Icons.my_location, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF083C81), width: 1),
+            ),
+            child: const Text(
+              "Detect Location",
+              style: TextStyle(
+                color: Color(0xFF083C81),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

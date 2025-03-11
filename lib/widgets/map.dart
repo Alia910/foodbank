@@ -1,7 +1,9 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:collection/collection.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MapPage extends StatefulWidget {
   final String town;
@@ -14,107 +16,117 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  late GoogleMapController mapController;
-
-  // Marker set to hold all markers
+  final Completer<GoogleMapController> _controller = Completer();
   Set<Marker> markers = {};
-
-  // Polylines to draw the route
-  //Set<Polyline> polylines = {};
-
-  // Data structure to hold food banks per town with operating hours
-  final Map<String, List<Map<String, dynamic>>> foodBanks = {
-    'Tapah Road': [
-      {
-        'name': 'Food Bank Siswa',
-        'coordinates': const LatLng(4.1776975900038575, 101.2188015888143),
-        'address': 'UiTM Cawangan Perak, Kampus Tapah, Tapah Road, 35400 Tapah Road, Perak',
-        'details': 'This food bank provides free food to those in need.',
-        'operatingHours': 'Mon - Fri: 8:00 AM - 6:00 PM',
-      },
-      {
-        'name': 'Food Bank 1',
-        'coordinates': const LatLng(4.173575670432285, 101.1915848844633),
-        'address': '123 Tapah Road, Tapah',
-        'details': 'Offering food and essentials for families in need.',
-        'operatingHours': 'Mon - Fri: 9:00 AM - 5:00 PM',
-      },
-    ],
-    'Bidor': [
-      {
-        'name': 'Masjid Abu Hurairah',
-        'coordinates': const LatLng(4.135919312888688, 101.27890483677633),
-        'address': 'Jalan Tapah, 35500 Bidor, Perak',
-        'details': 'A community food bank supporting the Bidor region.',
-        'operatingHours': 'Mon - Fri: 10:00 AM - 4:00 PM',
-      },
-    ],
-    'Sungkai': [
-      {
-        'name': 'Food Bank 4',
-        'coordinates': const LatLng(4.0167, 101.3167),
-        'address': '101 Sungkai Road, Sungkai',
-        'details': 'Providing food and emergency aid to Sungkai residents.',
-        'operatingHours': 'Tue - Sun: 9:00 AM - 5:00 PM',
-      },
-    ],
-    'Chenderiang': [
-      {
-        'name': 'Food Bank 5',
-        'coordinates': const LatLng(4.2500, 101.2500),
-        'address': '102 Chenderiang Road, Chenderiang',
-        'details': 'A local food bank helping the Chenderiang community.',
-        'operatingHours': 'Mon - Fri: 9:30 AM - 3:30 PM',
-      },
-    ],
-    'Temoh': [
-      {
-        'name': 'Food Bank 6',
-        'coordinates': const LatLng(4.3000, 101.2333),
-        'address': '103 Temoh Road, Temoh',
-        'details': 'Serving the people of Temoh with free food and support.',
-        'operatingHours': 'Mon - Sat: 7:00 AM - 5:00 PM',
-      },
-    ],
-  };
+  List<Map<String, dynamic>> foodBanks = [];
 
   @override
   void initState() {
     super.initState();
-
-    // Add markers only for the selected town
-    _addMarkersForTown(widget.town);
+    _fetchFoodBanks();
   }
 
-  // Function to add markers for the selected town
-  void _addMarkersForTown(String town) {
-    markers.clear(); // Clear existing markers
+  // Fetch food bank data from Firebase
+  Future<void> _fetchFoodBanks() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('foodBanks')
+          .where('town', isEqualTo: widget.town)
+          .get();
 
-    if (foodBanks.containsKey(town)) {
-      for (var foodBank in foodBanks[town]!) {
-        markers.add(
-          Marker(
-            markerId: MarkerId(foodBank['name']),
-            position: foodBank['coordinates'],
-            infoWindow: InfoWindow(
-              title: foodBank['name'],
-              snippet: "Click for more details", // Display snippet text as clickable
-              onTap: () {
-                _onMarkerTapped(foodBank);
-              },
-            ),
-            onTap: () {
-              // No action on marker tap
-            },
+      if (snapshot.docs.isEmpty) {
+        print("No food banks found for ${widget.town}");
+      }
+
+      foodBanks = snapshot.docs.map((doc) {
+        var data = doc.data();
+        if (data['coordinates'] == null ||
+            data['coordinates']['latitude'] == null ||
+            data['coordinates']['longitude'] == null) {
+          print("Invalid coordinates for ${data['name']}");
+          return null; // Ignore invalid data
+        }
+        return {
+          'name': data['name'],
+          'coordinates': LatLng(
+            data['coordinates']['latitude'],
+            data['coordinates']['longitude'],
           ),
+          'address': data['address'] ?? 'No address available',
+          'details': data['details'] ?? 'No details available',
+          'operatingHours': data['operatingHours'] ?? 'Unknown',
+        };
+      }).whereType<Map<String, dynamic>>().toList();
+
+      _addMarkers();
+    } catch (e) {
+      print("Error fetching food banks: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching food banks: $e")),
         );
       }
     }
   }
 
-  // Function to handle marker tap event
+  // Add markers for food banks
+  void _addMarkers() {
+    Set<Marker> newMarkers = {};
+    for (var foodBank in foodBanks) {
+      newMarkers.add(
+        Marker(
+          markerId: MarkerId(foodBank['name']),
+          position: foodBank['coordinates'],
+          infoWindow: InfoWindow(
+            title: foodBank['name'],
+            snippet: "Tap for details",
+            onTap: () => _onMarkerTapped(foodBank),
+          ),
+        ),
+      );
+    }
+
+    setState(() {
+      markers = newMarkers;
+    });
+
+    if (markers.isNotEmpty) {
+      _moveCameraToFitMarkers();
+    }
+  }
+
+  // Move camera to fit all markers
+  Future<void> _moveCameraToFitMarkers() async {
+    if (markers.isEmpty) return;
+
+    LatLngBounds bounds = _calculateBounds(markers);
+
+    final GoogleMapController controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+  }
+
+  // Calculate LatLngBounds for markers
+  LatLngBounds _calculateBounds(Set<Marker> markers) {
+    double minLat = markers.first.position.latitude;
+    double maxLat = markers.first.position.latitude;
+    double minLng = markers.first.position.longitude;
+    double maxLng = markers.first.position.longitude;
+
+    for (var marker in markers) {
+      minLat = min(minLat, marker.position.latitude);
+      maxLat = max(maxLat, marker.position.latitude);
+      minLng = min(minLng, marker.position.longitude);
+      maxLng = max(maxLng, marker.position.longitude);
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  // Handle marker tap
   void _onMarkerTapped(Map<String, dynamic> foodBank) {
-    // Show dialog with more details including operating hours
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -133,9 +145,7 @@ class _MapPageState extends State<MapPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Close'),
             ),
           ],
@@ -144,7 +154,7 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  // Function to calculate the nearest food bank using Dijkstra's Algorithm
+  // Find the nearest food bank
   Future<void> findNearestFoodBank() async {
     try {
       Position userPosition = await Geolocator.getCurrentPosition(
@@ -153,54 +163,52 @@ class _MapPageState extends State<MapPage> {
         ),
       );
 
-      // Create a list of nodes (locations)
-      List<Node> nodes = [
-        Node('User', LatLng(userPosition.latitude, userPosition.longitude)),
-        ...foodBanks[widget.town]!.map((foodBank) {
-          return Node(foodBank['name'], foodBank['coordinates']);
-        }).toList(),
-      ];
-
-      // Create edges (distances between locations)
-      List<Edge> edges = [];
-      for (int i = 0; i < nodes.length; i++) {
-        for (int j = i + 1; j < nodes.length; j++) {
-          double distance = Geolocator.distanceBetween(
-            nodes[i].position.latitude,
-            nodes[i].position.longitude,
-            nodes[j].position.latitude,
-            nodes[j].position.longitude,
+      if (foodBanks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("No food banks found.")),
           );
-          edges.add(Edge(nodes[i], nodes[j], distance));
-          edges.add(Edge(nodes[j], nodes[i], distance));  // Bidirectional edge
+        }
+        return;
+      }
+
+      Map<String, dynamic>? nearestFoodBank;
+      double closestDistance = double.infinity;
+
+      for (var foodBank in foodBanks) {
+        double distance = Geolocator.distanceBetween(
+          userPosition.latitude,
+          userPosition.longitude,
+          foodBank['coordinates'].latitude,
+          foodBank['coordinates'].longitude,
+        );
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          nearestFoodBank = foodBank;
         }
       }
 
-      // Run Dijkstra's algorithm
-      Dijkstra dijkstra = Dijkstra(nodes, edges);
-      Map<Node, double> distances = dijkstra.calculateShortestPaths(nodes[0]);
+      if (nearestFoodBank == null) return;
 
-      // Find the nearest food bank (excluding the user)
-      Node nearestFoodBank = nodes.skip(1).reduce((a, b) => distances[a]! < distances[b]! ? a : b);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Nearest food bank: ${nearestFoodBank['name']}"),
+          ),
+        );
+      }
 
-      // Display the result (nearest food bank)
-      double nearestDistance = distances[nearestFoodBank]!;
-      mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          nearestFoodBank.position,
-          15.0, // Zoom level
-        ),
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Nearest food bank: ${nearestFoodBank.name} (${(nearestDistance / 1000).toStringAsFixed(2)} km away)."),
-        ),
+      final GoogleMapController controller = await _controller.future;
+      controller.animateCamera(
+        CameraUpdate.newLatLngZoom(nearestFoodBank['coordinates'], 15.0),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error finding nearest food bank: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error finding nearest food bank: $e")),
+        );
+      }
     }
   }
 
@@ -217,81 +225,48 @@ class _MapPageState extends State<MapPage> {
             color: Colors.white,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.location_searching, color: Colors.white),
-            onPressed: findNearestFoodBank,
-            tooltip: "Find Nearest Food Bank",
-          ),
-        ],
       ),
       body: GoogleMap(
         onMapCreated: (controller) {
-          mapController = controller;
+          _controller.complete(controller);
         },
         initialCameraPosition: CameraPosition(
           target: widget.coordinates,
-          zoom: 10, // Adjusted zoom level for a better map view
+          zoom: 14,
         ),
         markers: markers,
-        //polylines: polylines,
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 60.0, right: 255.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            FloatingActionButton(
+              onPressed: findNearestFoodBank,
+              backgroundColor: const Color(0xFF083C81),
+              tooltip: "Find Nearest Food Bank",
+              child: const Icon(Icons.location_searching, color: Colors.white),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFF083C81), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Nearest Food Bank',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF083C81),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
-  }
-}
-
-class Node {
-  final String name;
-  final LatLng position;
-
-  Node(this.name, this.position);
-}
-
-class Edge {
-  final Node from;
-  final Node to;
-  final double distance;
-
-  Edge(this.from, this.to, this.distance);
-}
-
-class Dijkstra {
-  final List<Node> nodes;
-  final List<Edge> edges;
-
-  Dijkstra(this.nodes, this.edges);
-
-  Map<Node, double> calculateShortestPaths(Node start) {
-    // Initialize the distances
-    Map<Node, double> distances = {for (var node in nodes) node: double.infinity};
-    distances[start] = 0;
-
-    // Min-heap priority queue
-    PriorityQueue<Node> queue = PriorityQueue<Node>((a, b) => distances[a]!.compareTo(distances[b]!));
-    queue.add(start);
-
-    // Track the shortest path
-    Map<Node, Node?> previousNodes = {for (var node in nodes) node: null};
-
-    while (queue.isNotEmpty) {
-      Node currentNode = queue.removeFirst();
-
-      // Visit each neighboring node
-      for (Edge edge in edges) {
-        if (edge.from == currentNode) {
-          Node neighbor = edge.to;
-          double newDistance = distances[currentNode]! + edge.distance;
-
-          // If a shorter path to the neighbor is found, update the distance and queue
-          if (newDistance < distances[neighbor]!) {
-            distances[neighbor] = newDistance;
-            previousNodes[neighbor] = currentNode;
-            queue.add(neighbor);
-          }
-        }
-      }
-    }
-
-    return distances;
   }
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:foodbank/dashboard.dart';
+import 'package:foodbank/admin.dart';
+import 'package:foodbank/home.dart';
 import 'package:foodbank/account.dart';
 import 'package:foodbank/select_town.dart';
-import 'package:foodbank/widgets/donations.dart';
 import 'package:sliding_clipped_nav_bar/sliding_clipped_nav_bar.dart';
 
 class NavBar extends StatefulWidget {
@@ -16,10 +16,10 @@ class _NavBarState extends State<NavBar> {
   int selectedIndex = 0;
 
   final List<Widget> pages = [
-    const DashboardPage(),
-    const DonationsPage(notifications: [],),
+    const HomePage(),
     const SelectTownPage(),
     const AccPage(),
+    const AdminPage()
   ];
 
   @override
@@ -38,12 +38,8 @@ class _NavBarState extends State<NavBar> {
         selectedIndex: selectedIndex, // Highlight the selected index
         barItems: [
           BarItem(
-            icon: Icons.dashboard,
-            title: 'Dashboard',
-          ),
-          BarItem(
-            icon: Icons.volunteer_activism,
-            title: 'Donations',
+            icon: Icons.home,
+            title: 'Home',
           ),
           BarItem(
             icon: Icons.map,
